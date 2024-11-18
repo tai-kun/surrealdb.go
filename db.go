@@ -19,16 +19,68 @@ type DB struct {
 	fmt codec.Formatter
 }
 
-func New(fmt codec.Formatter, eng Engines) (*DB, error) {
-	return &DB{ctx: context.Background(), eng: eng, fmt: fmt}, nil
+type Options struct {
+	Context   context.Context
+	Engines   Engines
+	Formatter codec.Formatter
 }
 
-func NewWithContext(
-	ctx context.Context,
-	eng Engines,
-	fmt codec.Formatter,
-) (*DB, error) {
-	return &DB{ctx: ctx, eng: eng, fmt: fmt}, nil
+func New(opts ...func(o *Options) error) (*DB, error) {
+	o := Options{}
+	for _, f := range opts {
+		if err := f(&o); err != nil {
+			return nil, err
+		}
+	}
+	if o.Context == nil {
+		o.Context = context.Background()
+	}
+	if o.Engines == nil {
+		o.Engines = Engines{}
+	}
+	if len(o.Engines) == 0 {
+		o.Engines["http"] = HTTPEngine
+		o.Engines["https"] = HTTPEngine
+	}
+	if o.Formatter == nil {
+		o.Formatter = CBORFormatter
+	}
+
+	return &DB{ctx: o.Context, eng: o.Engines, fmt: o.Formatter}, nil
+}
+
+func WithContext(ctx context.Context) func(o *Options) error {
+	return func(o *Options) error {
+		o.Context = ctx
+		return nil
+	}
+}
+
+func WithHTTPEngine(schemes ...string) func(o *Options) error {
+	return func(o *Options) error {
+		for _, scheme := range schemes {
+			o.Engines[scheme] = HTTPEngine
+		}
+		return nil
+	}
+}
+
+func WithCBORFormatter() func(o *Options) error {
+	return func(o *Options) error {
+		o.Formatter = CBORFormatter
+		return nil
+	}
+}
+
+func WithJSONFormatter() func(o *Options) error {
+	return func(o *Options) error {
+		o.Formatter = JSONFormatter
+		return nil
+	}
+}
+
+func (db *DB) WithContext(ctx context.Context) {
+	db.ctx = ctx
 }
 
 func (db *DB) Connect(endpoint string) error {
